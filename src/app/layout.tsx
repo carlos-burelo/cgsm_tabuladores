@@ -16,7 +16,7 @@ const geistSans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
 	title: 'Tabuladores',
-	description: 'Herramienta minimalista para comparar servicios médicos de múltiples proveedores',
+	description: 'Herramienta para gestionar tabuladores en navegadores web',
 }
 
 export default function RootLayout({
