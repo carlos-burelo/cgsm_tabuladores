@@ -1,4 +1,4 @@
-// PRISMA
+// PRISMA 2
 
 generator client {
   provider = "prisma-client-js"
