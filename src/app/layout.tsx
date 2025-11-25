@@ -15,7 +15,7 @@ const geistSans = IBM_Plex_Sans({
 })
 
 export const metadata: Metadata = {
-	title: 'Comparador de Servicios',
+	title: 'Tabuladores',
 	description: 'Herramienta minimalista para comparar servicios médicos de múltiples proveedores',
 }
 
