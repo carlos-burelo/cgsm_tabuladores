@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "pnpm next dev",
     "build": "pnpm next build",
-    "start": "pnpm next start",
-    "lint": "biome check . --ext .ts,.tsx,.js,.jsx"
+    "start": "pnpm next start"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
