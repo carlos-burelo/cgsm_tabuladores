@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ServiceType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  services Service[]
+}
+
+model Service {
+  id             Int      @id @default(autoincrement())
+  concepto       String
+  precio         Float
+  proveedor      String
+  nombreEstandar String
+  uploadedAt     DateTime @default(now())
+
+  serviceTypeId Int
+  serviceType   ServiceType @relation(fields: [serviceTypeId], references: [id], onDelete: Cascade)
+
+  @@index([nombreEstandar])
+  @@index([proveedor])
+  @@index([serviceTypeId])
+}
