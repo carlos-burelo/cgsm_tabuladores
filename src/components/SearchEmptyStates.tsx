@@ -13,7 +13,6 @@ export function SearchEmptyStates({
   isPending,
   hasResults,
 }: SearchEmptyStatesProps) {
-  // No results found
   if (!isPending && hasSearch && !hasResults) {
     return (
       <div className="flex items-center justify-center min-h-full sm:min-h-80">
@@ -24,7 +23,6 @@ export function SearchEmptyStates({
     );
   }
 
-  // Loading with no results yet
   if (isPending && !hasResults) {
     return (
       <div className="flex items-center justify-center min-h-64 sm:min-h-80 md:min-h-96">
@@ -35,8 +33,6 @@ export function SearchEmptyStates({
       </div>
     );
   }
-
-  // Initial state - no search yet
   if (!hasSearch && !isPending) {
     return (
       <div className="flex items-center justify-center min-h-full sm:min-h-80 md:min-h-96">
