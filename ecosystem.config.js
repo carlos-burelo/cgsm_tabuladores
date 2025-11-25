@@ -1,17 +1,19 @@
+const path = require("path")
+
 module.exports = {
   apps: [
     {
       name: "tabuladores",
-      script: "node_modules/.bin/next",
-      args: "start -p 30001",
+      script: path.join(__dirname, ".next/standalone/server.js"),
       cwd: "/apps/tabuladores",
+      args: "",
       env: {
         NODE_ENV: "development",
-        PORT: 30001
+        PORT: 3001
       },
       env_production: {
         NODE_ENV: "production",
-        PORT: 30001
+        PORT: 3001
       },
       watch: false,
       autorestart: true,
