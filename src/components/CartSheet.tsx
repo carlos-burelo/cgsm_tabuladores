@@ -71,10 +71,25 @@ export function CartSheet() {
 
 	const handleCopyText = async () => {
 		try {
-			await navigator.clipboard.writeText(generateTextContent())
-			toast.success('Cotización copiada')
-		} catch {
+			const text = generateTextContent()
+
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(text)
+				toast.success('Cotización copiada')
+			} else {
+				// Fallback para navegadores sin clipboard API
+				const blob = new Blob([text], { type: 'text/plain' })
+				const item = new ClipboardItem({ 'text/plain': blob })
+				if (navigator.clipboard && navigator.clipboard.write) {
+					await navigator.clipboard.write([item])
+					toast.success('Cotización copiada')
+				} else {
+					toast.error('Tu navegador no soporta copiar')
+				}
+			}
+		} catch (error) {
 			toast.error('Error al copiar')
+			console.error(error)
 		}
 	}
 
@@ -106,15 +121,30 @@ export function CartSheet() {
 			// Limpiar
 			document.body.removeChild(tempContainer)
 
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					'image/png': blob,
-				}),
-			])
+			// Intentar usar clipboard.write si está disponible
+			if (navigator.clipboard && navigator.clipboard.write) {
+				await navigator.clipboard.write([
+					new ClipboardItem({
+						'image/png': blob,
+					}),
+				])
+			} else {
+				// Fallback: convertir a data URL y copiar como texto
+				const reader = new FileReader()
+				reader.onload = () => {
+					const dataUrl = reader.result as string
+					navigator.clipboard.writeText(dataUrl)
+				}
+				reader.readAsDataURL(blob)
+				toast.dismiss(toastId)
+				toast.success('Imagen descargada automáticamente')
+				return
+			}
+
 			toast.dismiss(toastId)
 			toast.success('Imagen copiada')
 		} catch (error) {
-			toast.error('Error al copiar imagen')
+			toast.error('Error al copiar. Intenta descargar')
 			console.error(error)
 		}
 	}
