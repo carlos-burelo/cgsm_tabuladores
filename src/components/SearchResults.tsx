@@ -15,7 +15,7 @@ export function SearchResults({ results, isPending }: SearchResultsProps) {
 		>
 			{results.map((service, index) => (
 				<div key={index}>
-					<div className='mb-4 sm:mb-6'>
+					<div className='mb-4 sm:mb-6 mx-2 md:mx-0'>
 						<h2 className='text-xl sm:text-2xl md:text-3xl font-semibold text-foreground wrap-break-words'>
 							{service.nombreEstandar}
 						</h2>

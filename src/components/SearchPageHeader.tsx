@@ -10,9 +10,11 @@ export function Header() {
       <header className="border-b border-border bg-background">
         <div className="px-3 sm:px-4 md:px-6 py-4">
           <div className="grid grid-flow-col items-center gap-4">
-            <h1 className="text-2xl sm:text-3xl md:text-3xl font-bold text-foreground">
+          <Link href="/" >
+                        <h1 className="text-2xl sm:text-3xl md:text-3xl font-bold text-foreground">
               Tabuladores
             </h1>
+          </Link>
 
             <nav className="grid grid-flow-col gap-2 justify-end">
               <Button asChild size="icon" title="Inicio">

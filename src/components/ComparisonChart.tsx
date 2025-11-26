@@ -2,6 +2,7 @@
 
 import { max, scaleBand, scaleLinear } from 'd3'
 import type { CSSProperties } from 'react'
+import { useCartStore } from '@/store/cartStore'
 import type { ComparisonResult } from '@/types/service'
 
 interface ComparisonChartProps {
@@ -19,10 +20,18 @@ const barColors = [
 	'from-rose-400 to-rose-500 hover:from-rose-500 hover:to-rose-600',
 ]
 
+const truncateLabel = (text: string, maxLength: number = 12): string => {
+	if (text.length <= maxLength) return text
+	return text.slice(0, maxLength) + '...'
+}
+
 export default function ComparisonChart({ data }: ComparisonChartProps) {
+	const addItem = useCartStore((state) => state.addItem)
+
 	const chartData = data.servicios.map((s) => ({
 		key: s.proveedor,
 		value: s.precio,
+		concepto: s.concepto,
 	}))
 
 	const xScale = scaleBand()
@@ -42,7 +51,7 @@ export default function ComparisonChart({ data }: ComparisonChartProps) {
 	const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
 	const marginValues = {
 		'--marginTop': isMobile ? '12px' : '20px',
-		'--marginRight': isMobile ? '20px' : '40px',
+		'--marginRight': isMobile ? '20px' : '20px',
 		'--marginBottom': isMobile ? '50px' : '40px',
 		'--marginLeft': isMobile ? '12px' : '20px',
 	} as CSSProperties
@@ -107,6 +116,15 @@ export default function ComparisonChart({ data }: ComparisonChartProps) {
 						const xPosition = xScale(d.key)
 						const colorClass = barColors[index % barColors.length]
 
+						const handleBarClick = () => {
+							addItem({
+								nombreEstandar: data.nombreEstandar,
+								proveedor: d.key,
+								precio: d.value,
+								concepto: d.concepto,
+							})
+						}
+
 						return (
 							<div
 								key={index}
@@ -115,8 +133,17 @@ export default function ComparisonChart({ data }: ComparisonChartProps) {
 									height: `${barHeight}%`,
 									marginLeft: `${xPosition}%`,
 								}}
+								onClick={handleBarClick}
 								className={`absolute bottom-0 bg-linear-to-b rounded-t-lg transition-colors cursor-pointer group ${colorClass}`}
-								title={`${d.key}: $${d.value.toLocaleString()}`}
+								title={`Clic para agregar: ${d.key} - $${d.value.toLocaleString()}`}
+								role='button'
+								tabIndex={0}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault()
+										handleBarClick()
+									}
+								}}
 							>
 								<div className='absolute -top-7 sm:-top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs sm:text-sm font-bold text-accent-foreground px-2 sm:px-3 py-1 sm:py-2'>
 									${d.value.toLocaleString()}
@@ -127,7 +154,8 @@ export default function ComparisonChart({ data }: ComparisonChartProps) {
 
 					{/* X Axis Labels */}
 					{chartData.map((entry, i) => {
-						const xPosition = xScale(entry.key)! + xScale.bandwidth() / 2
+						const xPosition = xScale(entry.key)!
+						const barWidth = xScale.bandwidth()
 
 						return (
 							<div
@@ -135,11 +163,15 @@ export default function ComparisonChart({ data }: ComparisonChartProps) {
 								className='absolute overflow-visible'
 								style={{
 									left: `${xPosition}%`,
+									width: `${barWidth}%`,
 									top: '100%',
 								}}
 							>
-								<div className='text-xs text-accent-foreground font-medium translate-y-1 sm:translate-y-2 -translate-x-1/2 max-w-[60px] sm:max-w-20 text-center wrap-break-words leading-tight'>
-									{entry.key}
+								<div
+									className='text-xs text-accent-foreground font-medium translate-y-1 sm:translate-y-2 text-center leading-tight px-1'
+									title={entry.key}
+								>
+									{truncateLabel(entry.key, 15)}
 								</div>
 							</div>
 						)

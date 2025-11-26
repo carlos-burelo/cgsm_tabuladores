@@ -22,7 +22,6 @@ export function SearchEmptyStates({
       </div>
     );
   }
-
   if (isPending && !hasResults) {
     return (
       <div className="flex items-center justify-center min-h-64 sm:min-h-80 md:min-h-96">
@@ -35,7 +34,7 @@ export function SearchEmptyStates({
   }
   if (!hasSearch && !isPending) {
     return (
-      <div className="flex items-center justify-center min-h-full sm:min-h-80 md:min-h-96">
+      <div className="flex items-center justify-center min-h-full lg:min-h-96">
         <div className="text-center px-4">
           <div className="mb-4">
             <SearchIcon className="h-12 sm:h-16 md:h-20 w-12 sm:w-16 md:w-20 text-muted-foreground mx-auto" />

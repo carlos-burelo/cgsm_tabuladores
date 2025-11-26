@@ -6,6 +6,7 @@ import { SearchBar } from '@/components/SearchBar'
 import { SearchEmptyStates } from '@/components/SearchEmptyStates'
 import { Header } from '@/components/SearchPageHeader'
 import { SearchResults } from '@/components/SearchResults'
+import { CartSheet } from '@/components/CartSheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useSearch } from '@/hooks/useSearch'
 import { getServiceTypesAction } from '@/lib/actions'
@@ -53,7 +54,7 @@ export default function Home() {
 				isLoadingTypes={isLoadingTypes}
 			/>
 			<ScrollArea className='w-full overflow-hidden'>
-				<div className='w-full max-w-4xl mx-auto '>
+				<div className='w-full max-w-4xl mx-auto h-full'>
 					{search && results.length > 0 && (
 						<SearchResults results={results} isPending={isPending} />
 					)}
@@ -65,6 +66,7 @@ export default function Home() {
 					/>
 				</div>
 			</ScrollArea>
+			<CartSheet />
 		</>
 	)
 }

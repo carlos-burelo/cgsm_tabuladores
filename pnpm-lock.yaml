@@ -29,6 +29,9 @@ importers:
       '@radix-ui/react-tabs':
         specifier: ^1.1.13
         version: 1.1.13(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@zumer/snapdom':
+        specifier: ^2.0.0
+        version: 2.0.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -65,6 +68,9 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
+      zustand:
+        specifier: ^5.0.8
+        version: 5.0.8(@types/react@19.2.2)(react@19.2.0)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.3.5
@@ -1287,6 +1293,9 @@ packages:
     resolution: {integrity: sha512-lrW200hZdbfRtztbygyaq/6jP6AKE8qQN2KvPcJ+x7wiD038YtnYtZ82IMNJ69GJibV7bwL3y9FgK+5w/pYt6g==}
     cpu: [x64]
     os: [win32]
+
+  '@zumer/snapdom@2.0.0':
+    resolution: {integrity: sha512-e/fkm5wCUd+9CssUIyH09xTeR4DvRTmZLGVOlnXLhr4HeI7sdc6ed8cLPiZKFtiQDRiwD3EKx4RIUrpQOJQY7A==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -2905,6 +2914,24 @@ packages:
   zod@4.1.12:
     resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
 
+  zustand@5.0.8:
+    resolution: {integrity: sha512-gyPKpIaxY9XcO2vSMrLbiER7QMAMGOQZVRdJ6Zi782jkbzZygq5GI9nG8g+sMgitRtndwaBSl7uiqC49o1SSiw==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
+
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
@@ -4043,6 +4070,8 @@ snapshots:
 
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
+
+  '@zumer/snapdom@2.0.0': {}
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
@@ -5939,3 +5968,8 @@ snapshots:
       zod: 4.1.12
 
   zod@4.1.12: {}
+
+  zustand@5.0.8(@types/react@19.2.2)(react@19.2.0):
+    optionalDependencies:
+      '@types/react': 19.2.2
+      react: 19.2.0
