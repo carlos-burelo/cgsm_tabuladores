@@ -76,7 +76,7 @@ function Invoke-SSH {
     }
     
     try {
-        $output = ssh -o ConnectTimeout=5 -o BatchMode=yes $Alias $Command 2>&1
+        $output = ssh -o ConnectTimeout=5 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 $Alias $Command 2>&1
         $result.Output = $output -join "`n"
         $result.ExitCode = $LASTEXITCODE
         
@@ -205,12 +205,15 @@ echo "  Node: `$(node -v 2>/dev/null || echo 'no disponible')"
 echo "  pnpm: `$(pnpm -v 2>/dev/null || echo 'no disponible')"
 echo "  PM2: `$(pm2 -v 2>/dev/null || echo 'no disponible')"
 
-if [ -f ".env" ]; then
+    if [ -f ".env" ]; then
     set -a
     source .env 2>/dev/null || true
     set +a
     echo "✅ Variables de entorno cargadas"
 fi
+
+# Forzamos instalación de devDependencies para tener acceso a Prisma CLI y herramientas de build
+export NODE_ENV=development
 
 echo "📦 Instalando dependencias..."
 if ! pnpm install --frozen-lockfile 2>&1 | grep -v "Progress:"; then
@@ -220,7 +223,8 @@ fi
 
 if [ -f "prisma/schema.prisma" ]; then
     echo "🗄️ Generando cliente Prisma..."
-    npx prisma generate
+    # Usamos pnpm exec para asegurar que usamos la versión local de prisma y no la última de npx
+    pnpm exec prisma generate
 fi
 
 $(if ($buildCommand) { @"
@@ -234,11 +238,10 @@ fi
 echo "🔄 Gestionando proceso PM2..."
 pm2 delete `$APP_NAME 2>/dev/null || echo "  No hay proceso previo"
 
+# Establecemos producción para la ejecución
 export NODE_ENV=production
 
-pm2 start pnpm --name "`$APP_NAME" -- start
-
-pm2 save --force
+pm2 start pnpm --name "`$APP_NAME" -- startpm2 save --force
 
 echo "✅ Deploy completado exitosamente"
 echo ""
@@ -605,8 +608,13 @@ function Repair-App {
     $envSetup = Get-RemoteEnvSetup
     Invoke-SSH $sshAlias "$envSetup; pm2 delete $packageName" -IgnoreError | Out-Null
     
-    Write-Log "Eliminando directorios remotos..." "step"
-    Invoke-SSH $sshAlias "rm -rf /apps/$packageName /repos/$packageName.git" | Out-Null
+    Write-Log "Eliminando directorios remotos (esto puede tardar)..." "step"
+    
+    Write-Log "  Eliminando /apps/$packageName..." "info"
+    Invoke-SSH $sshAlias "timeout 120s rm -rf /apps/$packageName" | Out-Null
+    
+    Write-Log "  Eliminando /repos/$packageName.git..." "info"
+    Invoke-SSH $sshAlias "timeout 60s rm -rf /repos/$packageName.git" | Out-Null
     
     Write-Log "Limpiando estado local..." "step"
     git remote remove production 2>$null | Out-Null
