@@ -216,7 +216,7 @@ fi
 export NODE_ENV=development
 
 echo "📦 Instalando dependencias..."
-if ! pnpm install --frozen-lockfile 2>&1 | grep -v "Progress:"; then
+if ! pnpm install --frozen-lockfile; then
     echo "⚠️  Instalación con frozen-lockfile falló, intentando sin frozen..."
     pnpm install
 fi

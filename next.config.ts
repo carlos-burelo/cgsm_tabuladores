@@ -1,14 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverActions: {
-    bodySizeLimit: "50mb",
-  },
-  compress: true,
-  poweredByHeader: false,
-  productionBrowserSourceMaps: false,
-  reactStrictMode: true,
-  swcMinify: true,
+	transpilePackages: ["@cgsm/sso-client"],
+	output: "standalone",
+	experimental: {
+		serverActions: {
+			bodySizeLimit: "50mb",
+		},
+	},
 };
 
 export default nextConfig;
