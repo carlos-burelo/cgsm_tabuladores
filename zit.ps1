@@ -227,6 +227,9 @@ if [ -f "prisma/schema.prisma" ]; then
     pnpm exec prisma generate
 fi
 
+# Restauramos NODE_ENV a production para el build
+export NODE_ENV=production
+
 $(if ($buildCommand) { @"
 echo "🔨 Construyendo proyecto..."
 if ! $buildCommand; then
