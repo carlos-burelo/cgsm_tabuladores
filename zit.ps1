@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ZIT_VERSION = "1.0.0"
+$ZIT_VERSION = "1.0.1"
 
 function Write-Log {
     param(
@@ -22,6 +22,10 @@ function Write-Log {
         "step" { Write-Host "[$timestamp] 🔄 $Message" -ForegroundColor Magenta }
         default { Write-Host "[$timestamp] $Message" }
     }
+}
+
+function Get-RemoteEnvSetup {
+    return "export PATH=`"`$HOME/.local/share/pnpm:`$HOME/.local/share/fnm:`$HOME/.fnm:`$PATH`"; . ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; if command -v fnm >/dev/null 2>&1; then eval `"`$(fnm env --shell bash)`"; fi"
 }
 
 function Get-PackageJson {
@@ -72,7 +76,7 @@ function Invoke-SSH {
     }
     
     try {
-        $output = ssh $Alias $Command 2>&1
+        $output = ssh -o ConnectTimeout=5 -o BatchMode=yes $Alias $Command 2>&1
         $result.Output = $output -join "`n"
         $result.ExitCode = $LASTEXITCODE
         
@@ -114,21 +118,23 @@ function Test-RemoteDependencies {
     
     Write-Log "Verificando dependencias remotas..." "step"
     
+    $envSetup = Get-RemoteEnvSetup
+    
     $deps = @{
         git = "git --version"
-        node = ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; eval `"`$(fnm env 2>/dev/null)`" 2>/dev/null || true; node --version"
-        pnpm = ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pnpm --version"
-        pm2 = ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 --version"
+        node = "$envSetup; node --version"
+        pnpm = "$envSetup; pnpm --version"
+        pm2 = "$envSetup; pm2 --version"
     }
     
     $missing = @()
     
     foreach ($dep in $deps.GetEnumerator()) {
         $result = Invoke-SSH $Alias $dep.Value -IgnoreError
-        if ($result.Success -and $result.Output) {
+        if ($result.Success -and $result.Output -and $result.Output -notmatch "not found" -and $result.Output -notmatch "command not found") {
             Write-Log "$($dep.Key): $($result.Output.Trim())" "info"
         } else {
-            Write-Log "$($dep.Key): NO INSTALADO" "warning"
+            Write-Log "$($dep.Key): NO INSTALADO (Output: '$($result.Output.Trim())')" "warning"
             $missing += $dep.Key
         }
     }
@@ -142,6 +148,114 @@ function Test-RemoteDependencies {
     } else {
         Write-Log "Todas las dependencias están instaladas" "success"
     }
+}
+
+function Update-RemoteHook {
+    Write-Log "Generando hook post-receive..." "step"
+    
+    $config = Get-ZitConfig
+    $package = Get-PackageJson
+    
+    $packageName = if ($config.APP_NAME) { $config.APP_NAME } else { $package.name }
+    $branch = $config.BRANCH
+    $sshAlias = $config.SSH_ALIAS
+    
+    $repoPath = "/repos/$packageName.git"
+    $appPath = "/apps/$packageName"
+    
+    $buildCommand = if ($package.scripts.build) { "pnpm build" } else { "" }
+    
+    $hookScript = @"
+#!/usr/bin/env bash
+set -e
+
+APP_PATH="$appPath"
+APP_NAME="$packageName"
+BRANCH="$branch"
+
+echo "=========================================="
+echo "🚀 Zit Deploy - `$APP_NAME"
+echo "🌿 Branch: `$BRANCH"
+echo "📅 `$(date '+%Y-%m-%d %H:%M:%S')"
+echo "=========================================="
+
+export GIT_WORK_TREE="`$APP_PATH"
+export GIT_DIR="$repoPath"
+
+if ! git show-ref --verify --quiet refs/heads/`$BRANCH; then
+    echo "❌ Branch `$BRANCH no existe"
+    exit 1
+fi
+
+echo "📦 Extrayendo archivos..."
+git checkout -f `$BRANCH
+
+cd "`$APP_PATH"
+
+echo "🔧 Cargando entorno..."
+export PATH="`$HOME/.local/share/pnpm:`$HOME/.local/share/fnm:`$HOME/.fnm:`$PATH"
+. ~/.bashrc 2>/dev/null || true
+. ~/.profile 2>/dev/null || true
+if command -v fnm >/dev/null 2>&1; then
+    eval "`$(fnm env --shell bash)"
+fi
+
+echo "📋 Versiones:"
+echo "  Node: `$(node -v 2>/dev/null || echo 'no disponible')"
+echo "  pnpm: `$(pnpm -v 2>/dev/null || echo 'no disponible')"
+echo "  PM2: `$(pm2 -v 2>/dev/null || echo 'no disponible')"
+
+if [ -f ".env" ]; then
+    set -a
+    source .env 2>/dev/null || true
+    set +a
+    echo "✅ Variables de entorno cargadas"
+fi
+
+echo "📦 Instalando dependencias..."
+if ! pnpm install --frozen-lockfile 2>&1 | grep -v "Progress:"; then
+    echo "⚠️  Instalación con frozen-lockfile falló, intentando sin frozen..."
+    pnpm install
+fi
+
+if [ -f "prisma/schema.prisma" ]; then
+    echo "🗄️ Generando cliente Prisma..."
+    npx prisma generate
+fi
+
+$(if ($buildCommand) { @"
+echo "🔨 Construyendo proyecto..."
+if ! $buildCommand; then
+    echo "❌ Build falló"
+    exit 1
+fi
+"@ })
+
+echo "🔄 Gestionando proceso PM2..."
+pm2 delete `$APP_NAME 2>/dev/null || echo "  No hay proceso previo"
+
+export NODE_ENV=production
+
+pm2 start pnpm --name "`$APP_NAME" -- start
+
+pm2 save --force
+
+echo "✅ Deploy completado exitosamente"
+echo ""
+pm2 info `$APP_NAME 2>/dev/null || true
+"@
+
+    $hookScriptUnix = $hookScript -replace "`r`n", "`n"
+    $hookScriptUnix = $hookScriptUnix -replace "`r", ""
+    
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($tempFile, $hookScriptUnix, [System.Text.UTF8Encoding]::new($false))
+    
+    scp $tempFile "${sshAlias}:$repoPath/hooks/post-receive"
+    Invoke-SSH $sshAlias "chmod +x $repoPath/hooks/post-receive" | Out-Null
+    
+    Remove-Item $tempFile -Force
+    Write-Log "Hook actualizado" "success"
 }
 
 function Initialize-Zit {
@@ -199,92 +313,17 @@ function Initialize-Zit {
     }
     Write-Log "  Start: pnpm start" "info"
     
-    Write-Log "Generando hook post-receive..." "step"
+    Update-RemoteHook
     
-    $buildCommand = if ($package.scripts.build) { "pnpm build" } else { "" }
-    
-    $hookScript = @"
-#!/usr/bin/env bash
-set -e
-
-APP_PATH="$appPath"
-APP_NAME="$packageName"
-BRANCH="$branch"
-
-echo "=========================================="
-echo "🚀 Zit Deploy - `$APP_NAME"
-echo "🌿 Branch: `$BRANCH"
-echo "📅 `$(date '+%Y-%m-%d %H:%M:%S')"
-echo "=========================================="
-
-export GIT_WORK_TREE="`$APP_PATH"
-export GIT_DIR="$repoPath"
-
-if ! git show-ref --verify --quiet refs/heads/`$BRANCH; then
-    echo "❌ Branch `$BRANCH no existe"
-    exit 1
-fi
-
-echo "📦 Extrayendo archivos..."
-git checkout -f `$BRANCH
-
-cd "`$APP_PATH"
-
-echo "🔧 Cargando entorno..."
-export PATH="`$HOME/.local/share/fnm:`$HOME/.local/share/pnpm:`$PATH"
-. ~/.bashrc 2>/dev/null || true
-. ~/.profile 2>/dev/null || true
-eval "`$(fnm env 2>/dev/null)" 2>/dev/null || true
-
-echo "📋 Versiones:"
-echo "  Node: `$(node -v 2>/dev/null || echo 'no disponible')"
-echo "  pnpm: `$(pnpm -v 2>/dev/null || echo 'no disponible')"
-echo "  PM2: `$(pm2 -v 2>/dev/null || echo 'no disponible')"
-
-if [ -f ".env" ]; then
-    set -a
-    source .env 2>/dev/null || true
-    set +a
-    echo "✅ Variables de entorno cargadas"
-fi
-
-echo "📦 Instalando dependencias..."
-if ! pnpm install --frozen-lockfile 2>&1 | grep -v "Progress:"; then
-    echo "⚠️  Instalación con frozen-lockfile falló, intentando sin frozen..."
-    pnpm install
-fi
-
-$(if ($buildCommand) { @"
-echo "🔨 Construyendo proyecto..."
-if ! $buildCommand; then
-    echo "❌ Build falló"
-    exit 1
-fi
-"@ })
-
-echo "🔄 Gestionando proceso PM2..."
-pm2 delete `$APP_NAME 2>/dev/null || echo "  No hay proceso previo"
-
-export NODE_ENV=production
-
-pm2 start pnpm --name "`$APP_NAME" -- start
-
-pm2 save --force
-
-echo "✅ Deploy completado exitosamente"
-echo ""
-pm2 info `$APP_NAME 2>/dev/null || true
-"@
-
-    $hookScript | ssh $sshAlias "cat > $repoPath/hooks/post-receive && chmod +x $repoPath/hooks/post-receive"
+    Write-Log "Limpiando configuración git previa..." "step"
+    git remote remove production 2>$null | Out-Null
     
     Write-Log "Configurando git remote 'production'..." "step"
-    git remote remove production 2>$null
-    
-    $sshInfo = Invoke-SSH $sshAlias "echo `$USER@`$HOSTNAME"
-    $remoteUrl = "ssh://$($sshInfo.Output.Trim())$repoPath"
-    
+    $remoteUrl = "${sshAlias}:${repoPath}"
     git remote add production $remoteUrl
+    
+    $verifyRemote = git remote get-url production
+    Write-Log "Remote configurado: $verifyRemote" "info"
     
     Write-Log "Creando archivo .env de ejemplo..." "step"
     $envExample = "NODE_ENV=production`nPORT=3000"
@@ -313,13 +352,8 @@ function Deploy-Zit {
     $config = Get-ZitConfig
     $package = Get-PackageJson
     $branch = $config.BRANCH
-    $sshAlias = $config.SSH_ALIAS
     
     Write-Log "Branch: $branch" "info"
-    
-    if (-not (Test-SSHConnection $sshAlias)) {
-        throw "No se pudo establecer conexión SSH"
-    }
     
     Write-Log "Validando package.json..." "step"
     if (-not $package.name) {
@@ -329,8 +363,16 @@ function Deploy-Zit {
         throw "package.json debe tener un script 'start' definido"
     }
     
+    Write-Log "Verificando remote git..." "step"
+    $currentRemote = git remote get-url production 2>$null
+    if (-not $currentRemote) {
+        Write-Log "Remote 'production' no configurado, ejecuta: .\zit.ps1 init" "error"
+        throw "Remote no configurado"
+    }
+    Write-Log "Remote: $currentRemote" "info"
+    
     Write-Log "Agregando cambios..." "step"
-    git add .
+    git add . 2>&1 | Out-Null
     
     Write-Log "Creando commit..." "step"
     if ($AllowEmpty) {
@@ -356,7 +398,8 @@ function Deploy-Zit {
     Write-Log "========================================" "info"
     
     try {
-        git push production $branch 2>&1 | ForEach-Object {
+        $pushOutput = git push production $branch 2>&1
+        $pushOutput | ForEach-Object {
             Write-Host $_
         }
         
@@ -389,7 +432,8 @@ function Get-RemoteStatus {
     Write-Log "Estado: $packageName" "info"
     Write-Log "========================================" "info"
     
-    $pmInfo = Invoke-SSH $sshAlias ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 jlist" -IgnoreError
+    $envSetup = Get-RemoteEnvSetup
+    $pmInfo = Invoke-SSH $sshAlias "$envSetup; pm2 jlist" -IgnoreError
     
     if ($pmInfo.Success -and $pmInfo.Output) {
         try {
@@ -425,7 +469,8 @@ function Get-RemoteLogs {
     Write-Log "Logs de $packageName" "info"
     Write-Log "========================================" "info"
     
-    $result = Invoke-SSH $sshAlias ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 logs $packageName --lines $Lines --nostream" -IgnoreError
+    $envSetup = Get-RemoteEnvSetup
+    $result = Invoke-SSH $sshAlias "$envSetup; pm2 logs $packageName --lines $Lines --nostream" -IgnoreError
     
     if ($result.Success) {
         Write-Host $result.Output
@@ -442,7 +487,8 @@ function Restart-RemoteApp {
     
     Write-Log "Reiniciando $packageName..." "step"
     
-    $result = Invoke-SSH $sshAlias ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 restart $packageName"
+    $envSetup = Get-RemoteEnvSetup
+    $result = Invoke-SSH $sshAlias "$envSetup; pm2 restart $packageName"
     
     if ($result.Success) {
         Write-Log "Aplicación reiniciada" "success"
@@ -461,7 +507,8 @@ function Stop-RemoteApp {
     
     Write-Log "Deteniendo $packageName..." "step"
     
-    $result = Invoke-SSH $sshAlias ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 stop $packageName"
+    $envSetup = Get-RemoteEnvSetup
+    $result = Invoke-SSH $sshAlias "$envSetup; pm2 stop $packageName"
     
     if ($result.Success) {
         Write-Log "Aplicación detenida" "success"
@@ -478,7 +525,8 @@ function Start-RemoteApp {
     
     Write-Log "Iniciando $packageName..." "step"
     
-    $result = Invoke-SSH $sshAlias ". ~/.bashrc 2>/dev/null || true; . ~/.profile 2>/dev/null || true; pm2 start $packageName"
+    $envSetup = Get-RemoteEnvSetup
+    $result = Invoke-SSH $sshAlias "$envSetup; pm2 start $packageName"
     
     if ($result.Success) {
         Write-Log "Aplicación iniciada" "success"
@@ -535,6 +583,38 @@ function Show-RemoteEnv {
     Write-Host $result.Output
 }
 
+function Repair-App {
+    $config = Get-ZitConfig
+    $package = Get-PackageJson
+    $sshAlias = $config.SSH_ALIAS
+    $packageName = if ($config.APP_NAME) { $config.APP_NAME } else { $package.name }
+    
+    Write-Log "⚠️  ADVERTENCIA: ESTO BORRARÁ TODO EN EL SERVIDOR" "warning"
+    Write-Log "Se eliminarán:" "warning"
+    Write-Log "  - Proceso PM2: $packageName" "warning"
+    Write-Log "  - Directorio App: /apps/$packageName" "warning"
+    Write-Log "  - Repositorio Git: /repos/$packageName.git" "warning"
+    
+    $response = Read-Host "¿Estás seguro? (escribe 'borrar' para confirmar)"
+    if ($response -ne "borrar") {
+        Write-Log "Operación cancelada" "warning"
+        return
+    }
+    
+    Write-Log "Deteniendo y eliminando proceso PM2..." "step"
+    $envSetup = Get-RemoteEnvSetup
+    Invoke-SSH $sshAlias "$envSetup; pm2 delete $packageName" -IgnoreError | Out-Null
+    
+    Write-Log "Eliminando directorios remotos..." "step"
+    Invoke-SSH $sshAlias "rm -rf /apps/$packageName /repos/$packageName.git" | Out-Null
+    
+    Write-Log "Limpiando estado local..." "step"
+    git remote remove production 2>$null | Out-Null
+    
+    Write-Log "Reinicializando todo..." "step"
+    Initialize-Zit
+}
+
 function New-ZitConfig {
     Write-Log "Configuración de Zit" "info"
     Write-Log "========================================" "info"
@@ -569,6 +649,7 @@ Comandos:
 
   config              Crear configuración
   init                Inicializar en servidor
+  repair              Borrar todo y reinicializar (Hard Reset)
   deploy <mensaje>    Desplegar cambios
   retry <mensaje>     Forzar deploy (commit vacío)
   
@@ -588,6 +669,7 @@ Ejemplos:
 
   .\zit.ps1 config
   .\zit.ps1 init
+  .\zit.ps1 repair
   .\zit.ps1 deploy "Nueva feature"
   .\zit.ps1 retry "Forzar redeploy"
   .\zit.ps1 logs 100
@@ -606,6 +688,7 @@ try {
     switch ($Command) {
         "config" { New-ZitConfig }
         "init" { Initialize-Zit }
+        "repair" { Repair-App }
         "deploy" { Deploy-Zit -Message $Arg1 }
         "retry" { Deploy-Zit -Message $Arg1 -AllowEmpty }
         "status" { Get-RemoteStatus }
