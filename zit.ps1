@@ -244,7 +244,8 @@ pm2 delete `$APP_NAME 2>/dev/null || echo "  No hay proceso previo"
 # Establecemos producción para la ejecución
 export NODE_ENV=production
 
-pm2 start pnpm --name "`$APP_NAME" -- startpm2 save --force
+pm2 start pnpm --name "`$APP_NAME" -- start
+pm2 save --force
 
 echo "✅ Deploy completado exitosamente"
 echo ""
