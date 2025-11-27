@@ -1,5 +1,3 @@
-// PRISMA 2
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,27 +7,265 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model ServiceType {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?
-  createdAt   DateTime @default(now())
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("user")
+  departmentId String?
+  department Department? @relation(fields: [departmentId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  services Service[]
+  assignedTasks DocumentTask[] @relation("AssignedUser")
+  annotations   Annotation[]
+  auditLogs     AuditLog[]
+  notificationPreferences NotificationPreference[]
+
+  @@index([email])
+  @@index([departmentId])
 }
 
-model Service {
-  id             Int      @id @default(autoincrement())
-  concepto       String
-  precio         Float
-  proveedor      String
-  nombreEstandar String
-  uploadedAt     DateTime @default(now())
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  description String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  serviceTypeId Int
-  serviceType   ServiceType @relation(fields: [serviceTypeId], references: [id], onDelete: Cascade)
+  users     User[]
+  flows     Flow[]
+  documents Document[]
 
-  @@index([nombreEstandar])
-  @@index([proveedor])
-  @@index([serviceTypeId])
+  @@index([name])
+}
+
+model Flow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  version     Int      @default(1)
+  departmentId String
+  department  Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nodes     FlowNode[]
+  edges     FlowEdge[]
+  instances DocumentInstance[]
+
+  @@index([departmentId])
+  @@index([name])
+  @@unique([departmentId, name, version])
+}
+
+model FlowNode {
+  id        String   @id @default(cuid())
+  flowId    String
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  nodeId    String
+  type      String
+  label     String?
+  positionX Float
+  positionY Float
+  config    Json
+  isStart   Boolean  @default(false)
+  isEnd     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outgoing FlowEdge[] @relation("SourceNode")
+  incoming FlowEdge[] @relation("TargetNode")
+  tasks    DocumentTask[]
+
+  @@unique([flowId, nodeId])
+  @@index([flowId])
+}
+
+model FlowEdge {
+  id        String   @id @default(cuid())
+  flowId    String
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  edgeId    String
+  sourceId  String
+  source    FlowNode @relation("SourceNode", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    FlowNode @relation("TargetNode", fields: [targetId], references: [id], onDelete: Cascade)
+  condition Json?
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([flowId, edgeId])
+  @@index([flowId])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  type         String
+  referenceNumber String
+  metadata     Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  instances DocumentInstance[]
+
+  @@unique([departmentId, referenceNumber])
+  @@index([departmentId])
+  @@index([type])
+}
+
+model DocumentInstance {
+  id            String   @id @default(cuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  flowId        String
+  flow          Flow     @relation(fields: [flowId], references: [id])
+  currentNodeId String?
+  currentNode   FlowNode? @relation(fields: [currentNodeId], references: [id])
+  status        String   @default("pending")
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  updatedAt     DateTime @updatedAt
+
+  tasks       DocumentTask[]
+  annotations Annotation[]
+  executions  FlowExecution[]
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([documentId])
+  @@index([flowId])
+  @@index([status])
+  @@index([currentNodeId])
+}
+
+model DocumentTask {
+  id           String   @id @default(cuid())
+  instanceId   String
+  instance     DocumentInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  nodeId       String
+  node         FlowNode @relation(fields: [nodeId], references: [id])
+  assignedToId String?
+  assignedTo   User? @relation("AssignedUser", fields: [assignedToId], references: [id])
+  type         String
+  status       String   @default("todo")
+  payload      Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([instanceId])
+  @@index([nodeId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model Annotation {
+  id         String   @id @default(cuid())
+  instanceId String
+  instance   DocumentInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User @relation(fields: [authorId], references: [id])
+  body       String   @db.LongText
+  createdAt  DateTime @default(now())
+
+  @@index([instanceId])
+  @@index([authorId])
+}
+
+model FlowExecution {
+  id         String   @id @default(cuid())
+  instanceId String
+  instance   DocumentInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  step       Int
+  event      String
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  @@index([instanceId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  action    String
+  actorId   String?
+  actor     User? @relation(fields: [actorId], references: [id])
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([entityId])
+  @@index([action])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model IdempotencyKey {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  instanceId String
+  instance   DocumentInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  result     Json?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([key])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  data      Json?
+  read      Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email  Boolean @default(true)
+  inApp  Boolean @default(true)
+  taskAssigned Boolean @default(true)
+  taskCompleted Boolean @default(true)
+  instanceCompleted Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model WebhookLog {
+  id         String   @id @default(cuid())
+  url        String
+  event      String
+  payload    Json
+  statusCode Int?
+  response   String? @db.LongText
+  retryCount Int     @default(0)
+  success    Boolean @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([url])
+  @@index([event])
+  @@index([success])
+  @@index([createdAt])
 }
