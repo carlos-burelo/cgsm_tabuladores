@@ -265,6 +265,24 @@ pm2 info `$APP_NAME 2>/dev/null || true
     Write-Log "Hook actualizado" "success"
 }
 
+function Get-FreePort {
+    param([string]$Alias)
+    
+    Write-Log "Buscando puerto libre en servidor..." "step"
+    
+    $script = "var net = require('net'); var port = 3000; function check() { var server = net.createServer(); server.unref(); server.on('error', function() { port++; check(); }); server.listen(port, function() { server.close(function() { console.log(port); }); }); } check();"
+    
+    $envSetup = Get-RemoteEnvSetup
+    $result = Invoke-SSH $Alias "$envSetup; node -e `"$script`""
+    
+    if ($result.Success -and $result.Output -match "^\d+$") {
+        return $result.Output.Trim()
+    }
+    
+    Write-Log "No se pudo determinar un puerto libre, usando 3000 por defecto" "warning"
+    return "3000"
+}
+
 function Initialize-Zit {
     Write-Log "Zit Deploy v$ZIT_VERSION - Inicialización" "info"
     Write-Log "========================================" "info"
@@ -332,9 +350,15 @@ function Initialize-Zit {
     $verifyRemote = git remote get-url production
     Write-Log "Remote configurado: $verifyRemote" "info"
     
-    Write-Log "Creando archivo .env de ejemplo..." "step"
-    $envExample = "NODE_ENV=production`nPORT=3000"
-    $envExample | ssh $sshAlias "cat > $appPath/.env.example"
+    $port = Get-FreePort $sshAlias
+    Write-Log "Puerto asignado: $port" "success"
+    
+    Write-Log "Creando archivo .env inicial..." "step"
+    $envContent = "NODE_ENV=production`nPORT=$port"
+    
+    # Creamos tanto .env como .env.example
+    $envContent | ssh $sshAlias "cat > $appPath/.env"
+    $envContent | ssh $sshAlias "cat > $appPath/.env.example"
     
     Write-Log "========================================" "success"
     Write-Log "Inicialización completada" "success"
