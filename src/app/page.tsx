@@ -10,6 +10,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useSearch } from '@/hooks/useSearch'
 import { getServiceTypesAction } from '@/lib/actions'
 
+
+
 interface ServiceType {
 	id: number
 	name: string
