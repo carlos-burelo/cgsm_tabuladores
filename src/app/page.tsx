@@ -18,6 +18,8 @@ interface ServiceType {
 	description?: string | null
 }
 
+
+
 export default function Home() {
 	const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
 	const [selectedServiceType, setSelectedServiceType] = useState<number | null>(null)
