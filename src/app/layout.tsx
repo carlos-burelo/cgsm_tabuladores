@@ -15,7 +15,7 @@ const geistSans = IBM_Plex_Sans({
 })
 
 export const metadata: Metadata = {
-	title: 'Comparador de Servicios',
+	title: 'Comparador de Servicios UJAT',
 	description: 'Herramienta minimalista para comparar servicios médicos de múltiples proveedores',
 }
 
